@@ -11,25 +11,20 @@ namespace transport_catalogue {
                 auto info_opt = transport_catalogue.GetBusInfo(id);
                 if (info_opt) {
                     transport_catalogue::core::BusInfo info = *info_opt;
-                    output << "Bus " << info.X << ": " << info.R << " stops on route, " << info.U << " unique stops, " << std::fixed << std::setprecision(6) << info.L << " route length\n";
+                    output << "Bus " << id << ": " << info.all_stops << " stops on route, " << info.unique_stops << " unique stops, " << std::fixed << std::setprecision(6) << info.route_length << " route length\n";
                 } else {
                     output << "Bus " << id << ": not found\n";
                 }
             }
             if (type == "Stop") {
-                auto info_opt = transport_catalogue.GetStopInfo(id);
-                if (info_opt) {
-                    const auto& info = *info_opt;
-                    if (info.empty()) {
+                const auto& info = transport_catalogue.GetStopInfo(id);
+                if (info != nullptr) {
+                    if (info->empty()) {
                         output << "Stop " << id << ": no buses\n";
                     } else {
-                        std::set<std::string_view> result;
-                        for (auto bus : info) {
-                            result.insert(bus->name);
-                        }
                         output << "Stop " << id << ": buses";
-                        for (auto bus : result) {
-                            output << " " << bus;
+                        for (const auto* bus : *info) {
+                            output << " " << bus->name;
                         }
                         output << "\n";
                     }
@@ -38,6 +33,15 @@ namespace transport_catalogue {
                 }
             }
             
+        }
+        void ProcesRequests(std::istream& in, std::ostream& out, const core::TransportCatalogue& catalogue) {
+            int stat_request_count;
+            in >> stat_request_count >> std::ws;
+            for (int i = 0; i < stat_request_count; ++i) {
+                std::string line;
+                std::getline(in, line);
+                io::ParseAndPrintStat(catalogue, line, out);
+            }
         }
     }
 }

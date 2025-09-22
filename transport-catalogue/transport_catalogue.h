@@ -27,26 +27,31 @@ namespace transport_catalogue {
 		};
 
 		struct BusInfo {
-			std::string X;
-			size_t R = 0;
-			size_t U = 0;
-			double L = 0.0;
+			size_t all_stops = 0;
+			size_t unique_stops = 0;
+			double route_length = 0.0;
+		};
+
+		struct BusComp {
+			bool operator()(const Bus* lhs, const Bus* rhs) const {
+				return lhs -> name < rhs -> name;
+			}
 		};
 
 		class TransportCatalogue {
 		public:
-			void AddStop(std::string name, geo::Coordinates coords);
-			void AddBus(std::string name, std::deque<const Stop*> stops);
+			void AddStop(std::string name, const geo::Coordinates coords);
+			void AddBus(std::string name, const std::deque<const Stop*> stops);
 			const Bus* FindBus(std::string_view name) const;
 			const Stop* FindStop(std::string_view name) const;
 			std::optional<BusInfo> GetBusInfo(std::string_view name) const;
-			std::optional<std::unordered_set<const Bus*>> GetStopInfo(std::string_view name) const;
+			const std::set<const Bus*, BusComp>* GetStopInfo(std::string_view name) const;
 		private:
 			std::deque<Stop> stops_storage_;
 			std::deque<Bus> buses_storage_;
 			std::unordered_map<std::string_view, const Stop*> stops_point_;
 			std::unordered_map<std::string_view, const Bus*> buses_point_;
-			std::unordered_map<const Stop*, std::unordered_set<const Bus*>> buses_at_stop_;
+			std::unordered_map<const Stop*, std::set<const Bus*, BusComp>> buses_at_stop_;
 		};
 	}
 }

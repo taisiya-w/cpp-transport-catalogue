@@ -39,5 +39,7 @@ namespace transport_catalogue {
         private:
             std::vector<CommandDescription> commands_;
         };
-    }
+
+        void ReadInput(std::istream& in, core::TransportCatalogue& catalogue);
+    }               
 }

@@ -130,5 +130,16 @@ namespace transport_catalogue {
                 }
             }
         }
+        void ReadInput(std::istream& in, core::TransportCatalogue& catalogue) {
+            int base_request_count;
+            in >> base_request_count >> std::ws;
+            InputReader reader;
+            for (int i = 0; i < base_request_count; ++i) {
+                std::string line;
+                std::getline(in, line);
+                reader.ParseLine(line);
+            }
+            reader.ApplyCommands(catalogue);
+        }
     }
 }

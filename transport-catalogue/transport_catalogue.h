@@ -63,7 +63,7 @@ namespace transport_catalogue {
 			std::unordered_map<std::string_view, const Stop*> stops_point_;
 			std::unordered_map<std::string_view, const Bus*> buses_point_;
 			std::unordered_map<const Stop*, std::set<const Bus*, BusComp>> buses_at_stop_;
-            		std::unordered_map<std::pair<const Stop*, const Stop*>, int, PairHash> road_distances_;
+            std::unordered_map<std::pair<const Stop*, const Stop*>, int, PairHash> road_distances_;
 		};
 	}
 }

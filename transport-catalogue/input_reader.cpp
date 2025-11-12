@@ -170,7 +170,9 @@ namespace transport_catalogue {
                             dist_str += std::string(parts[i]);
                         }
                         auto dist_map = detail::ParseStopDistances(dist_str);
-                        catalogue.AddStopDistances(c.id, dist_map);
+                        for (const auto& [neighbour_name, dist] : dist_map) {
+                            catalogue.AddDistance(c.id, neighbour_name, dist);
+                        }
                     }
                 }
             }

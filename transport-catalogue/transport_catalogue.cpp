@@ -15,7 +15,9 @@ namespace transport_catalogue {
             const Bus* ptr = &buses_storage_.back();
             buses_point_[ptr->name] = ptr;
             for (auto s : stops) {
-                buses_at_stop_[s].insert(ptr);
+                if (s != nullptr) {
+                    buses_at_stop_[s].insert(ptr);
+                }
             }
         }
 
@@ -83,16 +85,18 @@ namespace transport_catalogue {
             return 0;
         }
 
-        void TransportCatalogue::AddStopDistances(std::string_view stop_name, const std::unordered_map<std::string_view, int>& distances) {
-            const Stop* current_stop_ptr = FindStop(stop_name);
-            if (current_stop_ptr == nullptr) {
-                return;
+        void TransportCatalogue::AddDistance(std::string_view from, std::string_view to, int distance) {
+            const Stop* from_ptr = FindStop(from);
+            const Stop* to_ptr = FindStop(to);
+            if (from_ptr == nullptr || to_ptr == nullptr) {
+                return; 
             }
-            for (const auto& [neighbour_stop, distance] : distances) {
-                const Stop* neighbour_stop_ptr = FindStop(neighbour_stop);
-                if (neighbour_stop_ptr != nullptr) {
-                    road_distances_[{current_stop_ptr, neighbour_stop_ptr}] = distance;
-                }
+
+            road_distances_[{from_ptr, to_ptr}] = distance;
+            
+            auto backward_key = std::make_pair(to_ptr, from_ptr);
+            if (road_distances_.find(backward_key) == road_distances_.end()) {
+                road_distances_[backward_key] = distance;
             }
         }
     }

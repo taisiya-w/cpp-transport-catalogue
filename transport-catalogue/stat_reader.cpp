@@ -11,7 +11,7 @@ namespace transport_catalogue {
                 auto info_opt = transport_catalogue.GetBusInfo(id);
                 if (info_opt) {
                     transport_catalogue::core::BusInfo info = *info_opt;
-                    output << "Bus " << id << ": " << info.all_stops << " stops on route, " << info.unique_stops << " unique stops, " << std::fixed << std::setprecision(6) << info.route_length << " route length\n";
+                    output << "Bus " << id << ": " << info.all_stops << " stops on route, " << info.unique_stops << " unique stops, " << info.route_length << " route length"<< ", " << std::fixed << std::setprecision(6) << info.route_curvature << " curvature\n";
                 } else {
                     output << "Bus " << id << ": not found\n";
                 }
@@ -34,7 +34,7 @@ namespace transport_catalogue {
             }
             
         }
-        void ProcesRequests(std::istream& in, std::ostream& out, const core::TransportCatalogue& catalogue) {
+        void ProcessRequests(std::istream& in, std::ostream& out, const core::TransportCatalogue& catalogue) {
             int stat_request_count;
             in >> stat_request_count >> std::ws;
             for (int i = 0; i < stat_request_count; ++i) {

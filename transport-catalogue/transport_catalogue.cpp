@@ -35,16 +35,19 @@ namespace transport_catalogue {
 
         std::optional<BusInfo> TransportCatalogue::GetBusInfo(std::string_view name) const {
             if (auto it = buses_point_.find(name); it != buses_point_.end()) {
+                double geo_length = 0.0;
                 const Bus* ptr = it->second;
                 BusInfo bus;
                 bus.all_stops = (ptr->stops).size();
                 std::unordered_set<const Stop*> unique;
                 for (size_t i = 0; i < (ptr->stops).size() - 1; ++i) {
-                    bus.route_length += ComputeDistance(ptr->stops[i]->coords, ptr->stops[i+1]->coords);
+                    bus.route_length += GetDistance(ptr->stops[i], ptr->stops[i+1]);
                     unique.insert(ptr->stops[i]);
+                    geo_length += ComputeDistance(ptr->stops[i]->coords, ptr->stops[i+1]->coords);
                 }
                 unique.insert(ptr->stops.back());
                 bus.unique_stops = unique.size();
+                bus.route_curvature = (geo_length > 0) ? (bus.route_length / geo_length) : 1.0;
                 return bus;
             }
             return std::nullopt;
@@ -61,6 +64,35 @@ namespace transport_catalogue {
                     return &empty_set;
                 }
                 return &it->second;
+            }
+        }
+
+        int TransportCatalogue::GetDistance(const Stop* from, const Stop* to) const {
+            if (from == to) {
+                return 0;
+            }
+            auto it = road_distances_.find({from, to});
+            if (it != road_distances_.end()) {
+                return it->second;
+            } 
+
+            auto rev_it = road_distances_.find({to, from});
+            if (rev_it != road_distances_.end()) {
+                return rev_it->second;
+            }
+            return 0;
+        }
+
+        void TransportCatalogue::AddStopDistances(std::string_view stop_name, const std::unordered_map<std::string_view, int>& distances) {
+            const Stop* current_stop_ptr = FindStop(stop_name);
+            if (current_stop_ptr == nullptr) {
+                return;
+            }
+            for (const auto& [neighbour_stop, distance] : distances) {
+                const Stop* neighbour_stop_ptr = FindStop(neighbour_stop);
+                if (neighbour_stop_ptr != nullptr) {
+                    road_distances_[{current_stop_ptr, neighbour_stop_ptr}] = distance;
+                }
             }
         }
     }

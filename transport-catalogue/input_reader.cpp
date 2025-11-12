@@ -78,6 +78,30 @@ namespace transport_catalogue {
             return results;
         }
 
+        std::unordered_map<std::string_view, int> ParseStopDistances(std::string_view tail) {
+            std::unordered_map<std::string_view, int> result;
+            auto parts = Split(tail, ',');
+            
+            for (auto part : parts) {
+                part = Trim(part);
+                if (part.empty()) {
+                    continue;
+                }
+                std::string_view suffix = "m to ";
+                auto pos = part.find(suffix);
+                if (pos == std::string_view::npos) {
+                    continue;
+                }
+                std::string_view num = Trim(part.substr(0, pos));
+                std::string_view name = Trim(part.substr(pos + suffix.size()));
+                if (!num.empty() && !name.empty()) {
+                    int dist = std::stoi(std::string(num));
+                    result[name] = dist;
+                }
+            }
+            return result;
+        }
+
         transport_catalogue::io::CommandDescription ParseCommandDescription(std::string_view line) {
             auto colon_pos = line.find(':');
             if (colon_pos == line.npos) {
@@ -110,9 +134,15 @@ namespace transport_catalogue {
         }
 
         void InputReader::ApplyCommands([[maybe_unused]] transport_catalogue::core::TransportCatalogue& catalogue) const {
+
             for (const auto& c : commands_) {
                 if (c.command == "Stop") {
-                    catalogue.AddStop(c.id, transport_catalogue::detail::ParseCoordinates(c.description));
+                    auto parts = detail::Split(c.description, ',');
+                    if (parts.size() < 2) {
+                        continue;
+                    }
+                    std::string coords_str = std::string(parts[0]) + ", " + std::string(parts[1]);
+                    catalogue.AddStop(c.id, detail::ParseCoordinates(coords_str));
                 }
             }
 
@@ -129,7 +159,23 @@ namespace transport_catalogue {
                     catalogue.AddBus(c.id, stops);
                 }
             }
+
+            for (const auto& c : commands_) {
+                if (c.command == "Stop") {
+                    auto parts = detail::Split(c.description, ',');
+                    if (parts.size() > 2) {
+                        std::string dist_str;
+                        for (size_t i = 2; i < parts.size(); ++i) {
+                            if (i > 2) dist_str += ",";
+                            dist_str += std::string(parts[i]);
+                        }
+                        auto dist_map = detail::ParseStopDistances(dist_str);
+                        catalogue.AddStopDistances(c.id, dist_map);
+                    }
+                }
+            }
         }
+
         void ReadInput(std::istream& in, core::TransportCatalogue& catalogue) {
             int base_request_count;
             in >> base_request_count >> std::ws;

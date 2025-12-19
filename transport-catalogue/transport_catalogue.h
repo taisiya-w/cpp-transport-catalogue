@@ -7,22 +7,25 @@
 #include <set>
 #include <deque>
 #include <optional>
+#include <algorithm>
+
 #include "domain.h"
 
 namespace transport_catalogue {
 
 class TransportCatalogue {
 public:
-    void AddStop(std::string name, geo::Coordinates coords);
-    void AddBus(std::string name, std::vector<std::string> stop_names, bool is_roundtrip);
+    void AddStop(const std::string name, geo::Coordinates coords);
+    void AddBus(const std::string name, const std::vector<std::string> stop_names, bool is_roundtrip);
     const domain::Stop* FindStop(std::string_view name) const;
     const domain::Bus* FindBus(std::string_view name) const;
     void AddDistance(std::string_view from, std::string_view to, int distance);
     int GetDistance(const domain::Stop* from, const domain::Stop* to) const;
     const std::set<const domain::Bus*, domain::BusComp>* 
-    GetBusesForStop(std::string_view stop_name) const;
+    GetStopInfo(std::string_view stop_name) const;
     const std::unordered_map<std::string, const domain::Bus*>& GetAllBuses() const;
     std::optional<domain::BusInfo> GetBusInfo(std::string_view name) const;
+    
 
 private:
     std::deque<domain::Stop> stops_storage_;

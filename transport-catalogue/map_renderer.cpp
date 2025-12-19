@@ -1,6 +1,5 @@
 #include "map_renderer.h"
 #include "geo.h"
-
 #include <algorithm>
 #include <set>
 #include <unordered_set>
@@ -10,7 +9,7 @@ using namespace std;
 
 namespace renderer {
 
-class SphereProjector {
+class MapRenderer::SphereProjector {
 public:
     template <typename Iterator>
     SphereProjector(Iterator begin, Iterator end, double width, double height, double padding)
@@ -70,6 +69,10 @@ private:
     }
 };
 
+MapRenderer::MapRenderer(const RenderSettings& settings) 
+    : settings_(settings) {
+}
+
 void MapRenderer::SetBuses(const std::vector<const domain::Bus*>& buses, const transport_catalogue::TransportCatalogue& db) {
     buses_ = buses;
     all_coords_.clear();
@@ -92,30 +95,70 @@ void MapRenderer::SetBuses(const std::vector<const domain::Bus*>& buses, const t
     }
 }
 
-svg::Document MapRenderer::Render(const transport_catalogue::TransportCatalogue& db) const {
-    if (all_coords_.empty()) {
-        svg::Document empty_doc;
-        return empty_doc;
-    }
-
-    SphereProjector proj(all_coords_.begin(), all_coords_.end(),
-                         settings_.width, settings_.height, settings_.padding);
-
-    svg::Document doc;
-
-    vector<const domain::Bus*> sorted_buses = buses_;
+std::vector<const domain::Bus*> MapRenderer::GetSortedBuses() const {
+    std::vector<const domain::Bus*> sorted_buses = buses_;
     sort(sorted_buses.begin(), sorted_buses.end(),
         [](const domain::Bus* lhs, const domain::Bus* rhs) {
             return lhs->name < rhs->name;
         });
+    return sorted_buses;
+}
 
+std::vector<const domain::Stop*> MapRenderer::GetUniqueStops(const transport_catalogue::TransportCatalogue& db) const {
+    std::vector<const domain::Stop*> unique_stops;
+    for (const domain::Bus* bus : buses_) {
+        for (const string& name : bus->stop_names) {
+            if (const domain::Stop* stop = db.FindStop(name)) {
+                unique_stops.push_back(stop);
+            }
+        }
+    }
+
+    sort(unique_stops.begin(), unique_stops.end(),
+        [](const domain::Stop* a, const domain::Stop* b) {
+            return a->name < b->name;
+        });
+    auto last = unique(unique_stops.begin(), unique_stops.end(),
+        [](const domain::Stop* a, const domain::Stop* b) {
+            return a->name == b->name;
+        });
+    unique_stops.erase(last, unique_stops.end());
+    
+    return unique_stops;
+}
+
+svg::Text MapRenderer::CreateUnderlayerText(const std::string& text, const svg::Point& pos) const {
+    return svg::Text{}
+        .SetPosition(pos)
+        .SetOffset(settings_.stop_label_offset)
+        .SetFontSize(static_cast<uint32_t>(settings_.stop_label_font_size))
+        .SetFontFamily("Verdana")
+        .SetData(text)
+        .SetFillColor(settings_.underlayer_color)
+        .SetStrokeColor(settings_.underlayer_color)
+        .SetStrokeWidth(settings_.underlayer_width)
+        .SetStrokeLineCap(svg::StrokeLineCap::ROUND)
+        .SetStrokeLineJoin(svg::StrokeLineJoin::ROUND);
+}
+
+svg::Text MapRenderer::CreateFillText(const std::string& text, const svg::Point& pos, const svg::Color& fill_color) const {
+    return svg::Text{}
+        .SetPosition(pos)
+        .SetOffset(settings_.stop_label_offset)
+        .SetFontSize(static_cast<uint32_t>(settings_.stop_label_font_size))
+        .SetFontFamily("Verdana")
+        .SetData(text)
+        .SetFillColor(fill_color);
+}
+
+void MapRenderer::RenderBusLines(svg::Document& doc, const std::vector<const domain::Bus*>& sorted_buses, const SphereProjector& proj, const transport_catalogue::TransportCatalogue& db) const {
     size_t color_index = 0;
     for (const domain::Bus* bus : sorted_buses) {
         if (bus->stop_names.size() < 2) {
             continue;
         }
         
-        vector<const domain::Stop*> stops;
+        std::vector<const domain::Stop*> stops;
         for (const string& name : bus->stop_names) {
             if (const domain::Stop* s = db.FindStop(name)) {
                 stops.push_back(s);
@@ -151,12 +194,14 @@ svg::Document MapRenderer::Render(const transport_catalogue::TransportCatalogue&
         doc.Add(polyline);
         ++color_index;
     }
+}
 
-    color_index = 0;
+void MapRenderer::RenderBusLabels(svg::Document& doc, const std::vector<const domain::Bus*>& sorted_buses, const SphereProjector& proj, const transport_catalogue::TransportCatalogue& db) const {
+    size_t color_index = 0;
     for (const domain::Bus* bus : sorted_buses) {
         if (bus->stop_names.empty()) continue;
         
-        vector<const domain::Stop*> stops;
+        std::vector<const domain::Stop*> stops;
         for (const string& name : bus->stop_names) {
             if (const domain::Stop* s = db.FindStop(name)) {
                 stops.push_back(s);
@@ -169,16 +214,14 @@ svg::Document MapRenderer::Render(const transport_catalogue::TransportCatalogue&
 
         svg::Color route_color = settings_.color_palette[color_index % settings_.color_palette.size()];
 
-        if (bus->is_roundtrip) {
-            svg::Point pos = proj(stops.front()->coords);
-            
+        auto renderBusLabel = [&](const svg::Point& pos, const std::string& bus_name) {
             doc.Add(svg::Text{}
                 .SetPosition(pos)
                 .SetOffset(settings_.bus_label_offset)
                 .SetFontSize(static_cast<uint32_t>(settings_.bus_label_font_size))
                 .SetFontFamily("Verdana")
                 .SetFontWeight("bold")
-                .SetData(bus->name)
+                .SetData(bus_name)
                 .SetFillColor(settings_.underlayer_color)
                 .SetStrokeColor(settings_.underlayer_color)
                 .SetStrokeWidth(settings_.underlayer_width)
@@ -192,63 +235,22 @@ svg::Document MapRenderer::Render(const transport_catalogue::TransportCatalogue&
                 .SetFontSize(static_cast<uint32_t>(settings_.bus_label_font_size))
                 .SetFontFamily("Verdana")
                 .SetFontWeight("bold")
-                .SetData(bus->name)
+                .SetData(bus_name)
                 .SetFillColor(route_color)
             );
+        };
+
+        if (bus->is_roundtrip) {
+            svg::Point pos = proj(stops.front()->coords);
+            renderBusLabel(pos, bus->name);
         } else {
             if (!stops.empty()) {
                 svg::Point first_pos = proj(stops.front()->coords);
-                
-                doc.Add(svg::Text{}
-                    .SetPosition(first_pos)
-                    .SetOffset(settings_.bus_label_offset)
-                    .SetFontSize(static_cast<uint32_t>(settings_.bus_label_font_size))
-                    .SetFontFamily("Verdana")
-                    .SetFontWeight("bold")
-                    .SetData(bus->name)
-                    .SetFillColor(settings_.underlayer_color)
-                    .SetStrokeColor(settings_.underlayer_color)
-                    .SetStrokeWidth(settings_.underlayer_width)
-                    .SetStrokeLineCap(svg::StrokeLineCap::ROUND)
-                    .SetStrokeLineJoin(svg::StrokeLineJoin::ROUND)
-                );
-                
-                doc.Add(svg::Text{}
-                    .SetPosition(first_pos)
-                    .SetOffset(settings_.bus_label_offset)
-                    .SetFontSize(static_cast<uint32_t>(settings_.bus_label_font_size))
-                    .SetFontFamily("Verdana")
-                    .SetFontWeight("bold")
-                    .SetData(bus->name)
-                    .SetFillColor(route_color)
-                );
+                renderBusLabel(first_pos, bus->name);
                 
                 if (stops.size() > 1 && stops.front() != stops.back()) {
                     svg::Point last_pos = proj(stops.back()->coords);
-                    
-                    doc.Add(svg::Text{}
-                        .SetPosition(last_pos)
-                        .SetOffset(settings_.bus_label_offset)
-                        .SetFontSize(static_cast<uint32_t>(settings_.bus_label_font_size))
-                        .SetFontFamily("Verdana")
-                        .SetFontWeight("bold")
-                        .SetData(bus->name)
-                        .SetFillColor(settings_.underlayer_color)
-                        .SetStrokeColor(settings_.underlayer_color)
-                        .SetStrokeWidth(settings_.underlayer_width)
-                        .SetStrokeLineCap(svg::StrokeLineCap::ROUND)
-                        .SetStrokeLineJoin(svg::StrokeLineJoin::ROUND)
-                    );
-                    
-                    doc.Add(svg::Text{}
-                        .SetPosition(last_pos)
-                        .SetOffset(settings_.bus_label_offset)
-                        .SetFontSize(static_cast<uint32_t>(settings_.bus_label_font_size))
-                        .SetFontFamily("Verdana")
-                        .SetFontWeight("bold")
-                        .SetData(bus->name)
-                        .SetFillColor(route_color)
-                    );
+                    renderBusLabel(last_pos, bus->name);
                 }
             }
         }
@@ -257,26 +259,9 @@ svg::Document MapRenderer::Render(const transport_catalogue::TransportCatalogue&
             ++color_index;
         }
     }
+}
 
-    vector<const domain::Stop*> unique_stops;
-    for (const domain::Bus* bus : buses_) {
-        for (const string& name : bus->stop_names) {
-            if (const domain::Stop* stop = db.FindStop(name)) {
-                unique_stops.push_back(stop);
-            }
-        }
-    }
-
-    sort(unique_stops.begin(), unique_stops.end(),
-        [](const domain::Stop* a, const domain::Stop* b) {
-            return a->name < b->name;
-        });
-    auto last = unique(unique_stops.begin(), unique_stops.end(),
-        [](const domain::Stop* a, const domain::Stop* b) {
-            return a->name == b->name;
-        });
-    unique_stops.erase(last, unique_stops.end());
-
+void MapRenderer::RenderStopCircles(svg::Document& doc, const std::vector<const domain::Stop*>& unique_stops, const SphereProjector& proj) const {
     for (const domain::Stop* stop : unique_stops) {
         svg::Point pos = proj(stop->coords);
         doc.Add(svg::Circle{}
@@ -285,7 +270,9 @@ svg::Document MapRenderer::Render(const transport_catalogue::TransportCatalogue&
             .SetFillColor("white")
         );
     }
+}
 
+void MapRenderer::RenderStopLabels(svg::Document& doc, const std::vector<const domain::Stop*>& unique_stops, const SphereProjector& proj) const {
     for (const domain::Stop* stop : unique_stops) {
         svg::Point pos = proj(stop->coords);
         
@@ -311,6 +298,28 @@ svg::Document MapRenderer::Render(const transport_catalogue::TransportCatalogue&
             .SetFillColor("black")
         );
     }
+}
+
+svg::Document MapRenderer::Render(const transport_catalogue::TransportCatalogue& db) const {
+    if (all_coords_.empty()) {
+        return svg::Document{};
+    }
+
+    SphereProjector proj(all_coords_.begin(), all_coords_.end(),
+                         settings_.width, settings_.height, settings_.padding);
+
+    svg::Document doc;
+
+    std::vector<const domain::Bus*> sorted_buses = GetSortedBuses();
+    std::vector<const domain::Stop*> unique_stops = GetUniqueStops(db);
+
+    RenderBusLines(doc, sorted_buses, proj, db);
+    
+    RenderBusLabels(doc, sorted_buses, proj, db);
+    
+    RenderStopCircles(doc, unique_stops, proj);
+    
+    RenderStopLabels(doc, unique_stops, proj);
 
     return doc;
 }

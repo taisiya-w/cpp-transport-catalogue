@@ -35,9 +35,8 @@ svg::Color ParseColor(const json::Node& color_node) {
 
 JSONReader::JSONReader(istream& input)
     : json_doc_(json::Load(input))
-    , root_(json_doc_.GetRoot().AsMap()) {
+    , root_(json_doc_.GetRoot().AsDict()) {
 }
-
 void JSONReader::Process(ostream& output) {
     ParseRenderSettings();
     
@@ -54,7 +53,7 @@ void JSONReader::ParseRenderSettings() {
         return;
     }
     
-    const auto& rs = it->second.AsMap();
+    const auto& rs = it->second.AsDict();
     render_settings_.width = rs.at("width").AsDouble();
     render_settings_.height = rs.at("height").AsDouble();
     render_settings_.padding = rs.at("padding").AsDouble();
@@ -65,10 +64,12 @@ void JSONReader::ParseRenderSettings() {
     render_settings_.underlayer_width = rs.at("underlayer_width").AsDouble();
     
     const auto& bl_offset = rs.at("bus_label_offset").AsArray();
-    render_settings_.bus_label_offset = {bl_offset[0].AsDouble(), bl_offset[1].AsDouble()};
+    render_settings_.bus_label_offset.x = bl_offset[0].AsDouble();
+    render_settings_.bus_label_offset.y = bl_offset[1].AsDouble();
     
     const auto& sl_offset = rs.at("stop_label_offset").AsArray();
-    render_settings_.stop_label_offset = {sl_offset[0].AsDouble(), sl_offset[1].AsDouble()};
+    render_settings_.stop_label_offset.x = sl_offset[0].AsDouble();
+    render_settings_.stop_label_offset.y = sl_offset[1].AsDouble();
     
     render_settings_.underlayer_color = ParseColor(rs.at("underlayer_color"));
     
@@ -85,7 +86,7 @@ void JSONReader::ParseBaseRequests() {
     }
     
     for (const auto& node : it->second.AsArray()) {
-        const auto& dict = node.AsMap();
+        const auto& dict = node.AsDict();
         if (dict.at("type").AsString() == "Stop") {
             stop_requests_.push_back(&dict);
         } else {
@@ -117,7 +118,7 @@ void JSONReader::AddDistancesFromJSON(const json::Dict& stop_dict) {
     string from = stop_dict.at("name").AsString();
     auto it = stop_dict.find("road_distances");
     if (it != stop_dict.end()) {
-        const auto& dist_map = it->second.AsMap();
+        const auto& dist_map = it->second.AsDict();
         for (const auto& [to, node] : dist_map) {
             db_.AddDistance(from, to, node.AsInt());
         }
@@ -147,8 +148,8 @@ void JSONReader::ParseStatRequests() {
     
     const auto& stat_requests = it->second.AsArray();
     for (const auto& req_node : stat_requests) {
-        if (!req_node.IsMap()) continue;
-        const auto& r = req_node.AsMap();
+        if (!req_node.IsDict()) continue;
+        const auto& r = req_node.AsDict();
         
         auto id_it = r.find("id");
         auto type_it = r.find("type");
@@ -178,27 +179,34 @@ void JSONReader::ParseStatRequests() {
 
 json::Node JSONReader::MakeBusResponse(int id, optional<domain::BusInfo> info) const {
     if (!info) {
-        return json::Dict{
-            {"request_id", json::Node(id)},
-            {"error_message", json::Node(string("not found"))}
-        };
+        json::Builder builder;
+        builder.StartDict()
+            .Key("request_id").Value(id)
+            .Key("error_message").Value("not found"s)
+            .EndDict();
+        return builder.Build();
     }
     
-    return json::Dict{
-        {"request_id", json::Node(id)},
-        {"stop_count", json::Node(static_cast<int>(info->all_stops))},
-        {"unique_stop_count", json::Node(static_cast<int>(info->unique_stops))},
-        {"route_length", json::Node(info->route_length)},
-        {"curvature", json::Node(info->route_curvature)}
-    };
+    json::Builder builder;
+    builder.StartDict()
+        .Key("request_id").Value(id)
+        .Key("stop_count").Value(static_cast<int>(info->all_stops))
+        .Key("unique_stop_count").Value(static_cast<int>(info->unique_stops))
+        .Key("route_length").Value(info->route_length)
+        .Key("curvature").Value(info->route_curvature)
+        .EndDict();
+    
+    return builder.Build();
 }
 
 json::Node JSONReader::MakeStopResponse(int id, const set<const domain::Bus*, domain::BusComp>* buses) const {
     if (buses == nullptr) {
-        return json::Dict{
-            {"request_id", json::Node(id)},
-            {"error_message", json::Node(string("not found"))}
-        };
+        json::Builder builder;
+        builder.StartDict()
+            .Key("request_id").Value(id)
+            .Key("error_message").Value("not found"s)
+            .EndDict();
+        return builder.Build();
     }
     
     vector<string> bus_names;
@@ -207,15 +215,19 @@ json::Node JSONReader::MakeStopResponse(int id, const set<const domain::Bus*, do
     }
     sort(bus_names.begin(), bus_names.end());
 
+    json::Builder builder;
+    
     json::Array bus_array;
     for (const auto& name : bus_names) {
         bus_array.push_back(json::Node(name));
     }
     
-    return json::Dict{
-        {"request_id", json::Node(id)},
-        {"buses", json::Node(bus_array)}
-    };
+    builder.StartDict()
+        .Key("request_id").Value(id)
+        .Key("buses").Value(bus_array)
+        .EndDict();
+    
+    return builder.Build();
 }
 
 json::Node JSONReader::MakeMapResponse(int id) const {
@@ -235,10 +247,13 @@ json::Node JSONReader::MakeMapResponse(int id) const {
     svg_doc.Render(svg_stream);
     string svg_str = svg_stream.str();
     
-    return json::Dict{
-        {"request_id", json::Node(id)},
-        {"map", json::Node(svg_str)}
-    };
+    json::Builder builder;
+    builder.StartDict()
+        .Key("request_id").Value(id)
+        .Key("map").Value(svg_str)
+        .EndDict();
+    
+    return builder.Build();
 }
 
 const renderer::RenderSettings& JSONReader::GetRenderSettings() const {
@@ -251,11 +266,6 @@ transport_catalogue::TransportCatalogue& JSONReader::GetTransportCatalogue() {
 
 const transport_catalogue::TransportCatalogue& JSONReader::GetTransportCatalogue() const {
     return db_;
-}
-
-void Process(istream& in, ostream& out) {
-    JSONReader reader(in);
-    reader.Process(out);
 }
 
 } // namespace json_reader

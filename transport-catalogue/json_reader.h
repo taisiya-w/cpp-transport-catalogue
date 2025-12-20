@@ -10,6 +10,7 @@
 #include "json.h"
 #include "map_renderer.h"
 #include "svg.h"
+#include "json_builder.h"
 
 namespace json_reader {
 
@@ -48,7 +49,5 @@ private:
     
     json::Array stat_responses_;
 };
-
-void Process(std::istream& in, std::ostream& out);
 
 } // namespace json_reader

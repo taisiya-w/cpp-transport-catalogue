@@ -51,7 +51,6 @@ void TransportCatalogue::AddDistance(std::string_view from, std::string_view to,
 }
 
 int TransportCatalogue::GetDistance(const domain::Stop* from, const domain::Stop* to) const {
-    if (from == to) return 0;
     
     auto it = road_distances_.find({from, to});
     if (it != road_distances_.end()) {

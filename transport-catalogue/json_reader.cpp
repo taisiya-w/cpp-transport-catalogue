@@ -37,10 +37,13 @@ JSONReader::JSONReader(istream& input)
     : json_doc_(json::Load(input))
     , root_(json_doc_.GetRoot().AsDict()) {
 }
+
 void JSONReader::Process(ostream& output) {
     ParseRenderSettings();
-    
+    ParseRoutingSettings();
     ParseBaseRequests();
+    
+    router_ = std::make_unique<transport_router::TransportRouter>(db_, routing_settings_);
     
     ParseStatRequests();
     
@@ -77,6 +80,17 @@ void JSONReader::ParseRenderSettings() {
     for (const auto& color_node : palette) {
         render_settings_.color_palette.push_back(ParseColor(color_node));
     }
+}
+
+void JSONReader::ParseRoutingSettings() {
+     auto it = root_.find("routing_settings");
+    if (it == root_.end()) {
+        return;
+    }
+    
+    const auto& rs = it->second.AsDict();
+    routing_settings_.bus_wait_time = rs.at("bus_wait_time").AsInt();
+    routing_settings_.bus_velocity = rs.at("bus_velocity").AsDouble();
 }
 
 void JSONReader::ParseBaseRequests() {
@@ -173,6 +187,14 @@ void JSONReader::ParseStatRequests() {
             }
         } else if (type == "Map") {
             stat_responses_.push_back(MakeMapResponse(id));
+        } 
+        else if (type == "Route") {
+            auto from_it = r.find("from");
+            auto to_it = r.find("to");
+            if (from_it != r.end() && from_it->second.IsString() &&
+                to_it != r.end() && to_it->second.IsString()) {
+                stat_responses_.push_back(MakeRouteResponse(id, from_it->second.AsString(), to_it->second.AsString()));
+            }
         }
     }
 }
@@ -252,6 +274,61 @@ json::Node JSONReader::MakeMapResponse(int id) const {
         .Key("request_id").Value(id)
         .Key("map").Value(svg_str)
         .EndDict();
+    
+    return builder.Build();
+}
+
+json::Node JSONReader::MakeRouteResponse(int id, const std::string& from, const std::string& to) const {
+    if (!router_) {
+        return json::Builder{}
+            .StartDict()
+                .Key("request_id").Value(id)
+                .Key("error_message").Value("not found"s)
+            .EndDict()
+            .Build();
+    }
+    
+    auto route_info = router_->BuildRoute(from, to);
+    
+    if (!route_info) {
+        return json::Builder{}
+            .StartDict()
+                .Key("request_id").Value(id)
+                .Key("error_message").Value("not found"s)
+            .EndDict()
+            .Build();
+    }
+    
+    json::Builder builder;
+    auto dict_builder = builder.StartDict()
+        .Key("request_id").Value(id);
+    
+    auto items_builder = dict_builder.Key("items").StartArray();
+    
+    for (auto edge_id : route_info->edges) {
+        const auto& wait_info = router_->GetWaitInfo(edge_id);
+        const auto& bus_info = router_->GetBusInfo(edge_id);
+        
+        if (!wait_info.stop_name.empty()) {
+            items_builder.StartDict()
+                .Key("type").Value("Wait"s)
+                .Key("stop_name").Value(wait_info.stop_name)
+                .Key("time").Value(wait_info.time)
+                .EndDict();
+        } else if (!bus_info.bus.empty()) {
+            items_builder.StartDict()
+                .Key("type").Value("Bus"s)
+                .Key("bus").Value(bus_info.bus)
+                .Key("span_count").Value(bus_info.span_count)
+                .Key("time").Value(bus_info.time)
+                .EndDict();
+        }
+    }
+    
+    items_builder.EndArray();
+    
+    dict_builder.Key("total_time").Value(route_info->total_time);
+    dict_builder.EndDict();
     
     return builder.Build();
 }

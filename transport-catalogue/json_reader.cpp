@@ -306,8 +306,8 @@ json::Node JSONReader::MakeRouteResponse(int id, const std::string& from, const 
     auto items_builder = dict_builder.Key("items").StartArray();
     
     for (auto edge_id : route_info->edges) {
-        const auto& wait_info = router_->GetWaitInfo(edge_id);
-        const auto& bus_info = router_->GetBusInfo(edge_id);
+        auto wait_info = router_->GetWaitInfo(edge_id);
+        auto bus_info = router_->GetBusInfo(edge_id);
         
         if (!wait_info.stop_name.empty()) {
             items_builder.StartDict()

@@ -16,11 +16,6 @@ struct RoutingSettings {
     double bus_velocity = 0.0;
 };
 
-struct RouteInfo {
-    double total_time = 0.0;
-    std::vector<graph::EdgeId> edges;
-};
-
 struct WaitActivity {
     std::string stop_name;
     double time = 0.0;
@@ -32,6 +27,11 @@ struct BusActivity {
     double time = 0.0;
 };
 
+struct RouteInfo {
+    double total_time = 0.0;
+    std::vector<graph::EdgeId> edges;
+};
+
 class TransportRouter {
 public:
     TransportRouter(const transport_catalogue::TransportCatalogue& catalogue, 
@@ -40,9 +40,8 @@ public:
     std::optional<RouteInfo> BuildRoute(const std::string& from, 
                                         const std::string& to) const;
     
-    const graph::Edge<double>& GetEdge(graph::EdgeId id) const;
-    const WaitActivity& GetWaitInfo(graph::EdgeId id) const;
-    const BusActivity& GetBusInfo(graph::EdgeId id) const;
+    WaitActivity GetWaitInfo(graph::EdgeId id) const;
+    BusActivity GetBusInfo(graph::EdgeId id) const;
     
 private:
     void BuildGraph();
@@ -64,7 +63,6 @@ private:
     
     size_t GetWaitVertexId(const std::string& stop_name) const;
     size_t GetBusVertexId(const std::string& stop_name) const;
-    std::string GetStopNameByVertexId(size_t vertex_id) const;
 };
 
 } // namespace transport_router

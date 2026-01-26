@@ -144,9 +144,12 @@ void TransportRouter::AddEdgesForBus(const domain::Bus* bus) {
 }
 
 double TransportRouter::ComputeBusTime(int distance) const {
-    double distance_km = distance / 1000.0;
+    constexpr double METERS_IN_KILOMETER = 1000.0;
+    constexpr double MINUTES_IN_HOUR = 60.0;
+    
+    double distance_km = distance / METERS_IN_KILOMETER;
     double time_hours = distance_km / settings_.bus_velocity;
-    return time_hours * 60.0;
+    return time_hours * MINUTES_IN_HOUR;
 }
 
 std::optional<RouteInfo> TransportRouter::BuildRoute(const std::string& from, 
@@ -179,26 +182,20 @@ std::optional<RouteInfo> TransportRouter::BuildRoute(const std::string& from,
     return result;
 }
 
-const graph::Edge<double>& TransportRouter::GetEdge(graph::EdgeId id) const {
-    return graph_->GetEdge(id);
-}
-
-const WaitActivity& TransportRouter::GetWaitInfo(graph::EdgeId id) const {
-    static WaitActivity empty{};
+WaitActivity TransportRouter::GetWaitInfo(graph::EdgeId id) const {
     auto it = wait_edges_.find(id);
     if (it != wait_edges_.end()) {
         return it->second;
     }
-    return empty;
+    return WaitActivity{};
 }
 
-const BusActivity& TransportRouter::GetBusInfo(graph::EdgeId id) const {
-    static BusActivity empty{};
+BusActivity TransportRouter::GetBusInfo(graph::EdgeId id) const {
     auto it = bus_edges_.find(id);
     if (it != bus_edges_.end()) {
         return it->second;
     }
-    return empty;
+    return BusActivity{};
 }
 
 size_t TransportRouter::GetWaitVertexId(const std::string& stop_name) const {
@@ -215,21 +212,6 @@ size_t TransportRouter::GetBusVertexId(const std::string& stop_name) const {
         return it->second * 2 + 1;
     }
     return 0;
-}
-
-std::string TransportRouter::GetStopNameByVertexId(size_t vertex_id) const {
-    if (vertex_id % 2 == 0) {
-        size_t stop_index = vertex_id / 2;
-        if (stop_index < vertex_id_to_stop_.size()) {
-            return vertex_id_to_stop_[stop_index];
-        }
-    } else {
-        size_t stop_index = (vertex_id - 1) / 2;
-        if (stop_index < vertex_id_to_stop_.size()) {
-            return vertex_id_to_stop_[stop_index];
-        }
-    }
-    return "";
 }
 
 } // namespace transport_router

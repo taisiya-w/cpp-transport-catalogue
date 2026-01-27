@@ -305,22 +305,19 @@ json::Node JSONReader::MakeRouteResponse(int id, const std::string& from, const 
     
     auto items_builder = dict_builder.Key("items").StartArray();
     
-    for (auto edge_id : route_info->edges) {
-        auto wait_info = router_->GetWaitInfo(edge_id);
-        auto bus_info = router_->GetBusInfo(edge_id);
-        
-        if (!wait_info.stop_name.empty()) {
+    for (const auto& activity : route_info->activities) {
+        if (activity.type == transport_router::ActivityType::WAIT) {
             items_builder.StartDict()
                 .Key("type").Value("Wait"s)
-                .Key("stop_name").Value(wait_info.stop_name)
-                .Key("time").Value(wait_info.time)
+                .Key("stop_name").Value(activity.name)
+                .Key("time").Value(activity.time)
                 .EndDict();
-        } else if (!bus_info.bus.empty()) {
+        } else if (activity.type == transport_router::ActivityType::BUS) {
             items_builder.StartDict()
                 .Key("type").Value("Bus"s)
-                .Key("bus").Value(bus_info.bus)
-                .Key("span_count").Value(bus_info.span_count)
-                .Key("time").Value(bus_info.time)
+                .Key("bus").Value(activity.name)
+                .Key("span_count").Value(activity.span_count)
+                .Key("time").Value(activity.time)
                 .EndDict();
         }
     }

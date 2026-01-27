@@ -33,7 +33,7 @@ void TransportRouter::BuildGraph() {
         };
         
         auto wait_edge_id = graph_->AddEdge(wait_edge);
-        wait_edges_[wait_edge_id] = {stop_name, static_cast<double>(settings_.bus_wait_time)};
+        wait_edges_[wait_edge_id] = stop_name;
         
         vertex_id++;
     }
@@ -79,7 +79,7 @@ void TransportRouter::AddEdgesForBus(const domain::Bus* bus) {
                 };
                 
                 auto edge_id = graph_->AddEdge(edge);
-                bus_edges_[edge_id] = {bus->name, span_count, travel_time};
+                bus_edges_[edge_id] = {bus->name, span_count};
             }
         }
     } else {
@@ -108,7 +108,7 @@ void TransportRouter::AddEdgesForBus(const domain::Bus* bus) {
                 };
                 
                 auto edge_id = graph_->AddEdge(edge);
-                bus_edges_[edge_id] = {bus->name, span_count, travel_time};
+                bus_edges_[edge_id] = {bus->name, span_count};
             }
         }
         
@@ -137,7 +137,7 @@ void TransportRouter::AddEdgesForBus(const domain::Bus* bus) {
                 };
                 
                 auto edge_id = graph_->AddEdge(edge);
-                bus_edges_[edge_id] = {bus->name, span_count, travel_time};
+                bus_edges_[edge_id] = {bus->name, span_count};
             }
         }
     }
@@ -177,25 +177,46 @@ std::optional<RouteInfo> TransportRouter::BuildRoute(const std::string& from,
     
     RouteInfo result;
     result.total_time = route->weight;
-    result.edges = std::move(route->edges);
+    
+    for (auto edge_id : route->edges) {
+        const auto& edge = graph_->GetEdge(edge_id);
+        
+        if (std::abs(edge.weight - static_cast<double>(settings_.bus_wait_time)) < 1e-6) {
+            result.activities.push_back(CreateWaitActivity(edge_id));
+        } else {
+            result.activities.push_back(CreateBusActivity(edge_id));
+        }
+    }
     
     return result;
 }
 
-WaitActivity TransportRouter::GetWaitInfo(graph::EdgeId id) const {
+RouteActivity TransportRouter::CreateWaitActivity(graph::EdgeId id) const {
+    RouteActivity activity;
+    activity.type = ActivityType::WAIT;
+    
     auto it = wait_edges_.find(id);
     if (it != wait_edges_.end()) {
-        return it->second;
+        activity.name = it->second;
+        activity.time = static_cast<double>(settings_.bus_wait_time);
     }
-    return WaitActivity{};
+    
+    return activity;
 }
 
-BusActivity TransportRouter::GetBusInfo(graph::EdgeId id) const {
+RouteActivity TransportRouter::CreateBusActivity(graph::EdgeId id) const {
+    RouteActivity activity;
+    activity.type = ActivityType::BUS;
+    
     auto it = bus_edges_.find(id);
     if (it != bus_edges_.end()) {
-        return it->second;
+        activity.name = it->second.first;
+        activity.span_count = it->second.second;
+        const auto& edge = graph_->GetEdge(id);
+        activity.time = edge.weight;
     }
-    return BusActivity{};
+    
+    return activity;
 }
 
 size_t TransportRouter::GetWaitVertexId(const std::string& stop_name) const {

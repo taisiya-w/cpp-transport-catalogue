@@ -16,20 +16,21 @@ struct RoutingSettings {
     double bus_velocity = 0.0;
 };
 
-struct WaitActivity {
-    std::string stop_name;
-    double time = 0.0;
+enum class ActivityType {
+    WAIT,
+    BUS
 };
 
-struct BusActivity {
-    std::string bus;
-    int span_count = 0;
+struct RouteActivity {
+    ActivityType type;
+    std::string name;
     double time = 0.0;
+    int span_count = 0;
 };
 
 struct RouteInfo {
     double total_time = 0.0;
-    std::vector<graph::EdgeId> edges;
+    std::vector<RouteActivity> activities;
 };
 
 class TransportRouter {
@@ -40,14 +41,14 @@ public:
     std::optional<RouteInfo> BuildRoute(const std::string& from, 
                                         const std::string& to) const;
     
-    WaitActivity GetWaitInfo(graph::EdgeId id) const;
-    BusActivity GetBusInfo(graph::EdgeId id) const;
-    
 private:
     void BuildGraph();
     void AddEdgesForBus(const domain::Bus* bus);
     
     double ComputeBusTime(int distance) const;
+    
+    RouteActivity CreateWaitActivity(graph::EdgeId id) const;
+    RouteActivity CreateBusActivity(graph::EdgeId id) const;
     
     const transport_catalogue::TransportCatalogue& catalogue_;
     RoutingSettings settings_;
@@ -58,8 +59,8 @@ private:
     std::unordered_map<std::string, size_t> stop_to_vertex_id_;
     std::vector<std::string> vertex_id_to_stop_;
     
-    std::unordered_map<graph::EdgeId, WaitActivity> wait_edges_;
-    std::unordered_map<graph::EdgeId, BusActivity> bus_edges_;
+    std::unordered_map<graph::EdgeId, std::string> wait_edges_;
+    std::unordered_map<graph::EdgeId, std::pair<std::string, int>> bus_edges_;
     
     size_t GetWaitVertexId(const std::string& stop_name) const;
     size_t GetBusVertexId(const std::string& stop_name) const;
